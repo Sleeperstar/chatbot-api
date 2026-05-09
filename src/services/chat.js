@@ -59,12 +59,21 @@ export async function sendMessage(userContent, conversationId = null) {
       });
       const generated = normalizeGeneratedTitle(titleCompletion.choices[0]?.message?.content);
       if (generated) {
-        const { error: titleUpdateError } = await supabase
+        resolvedTitle = generated;
+
+        const { data: updatedRows, error: titleUpdateError } = await supabase
           .from('conversations')
           .update({ title: generated })
-          .eq('id', conversationId);
-        if (!titleUpdateError) {
-          resolvedTitle = generated;
+          .eq('id', conversationId)
+          .select('id');
+
+        if (titleUpdateError) {
+          console.error('Fallo al guardar el título en Supabase:', titleUpdateError);
+        } else if (!updatedRows?.length) {
+          console.error(
+            'No se persistió el título (0 filas). Con RLS, UPDATE necesita poder SELECT esa fila. ' +
+              'Usa SUPABASE_SERVICE_ROLE_KEY en este servidor o ajusta políticas en conversations.',
+          );
         }
       }
     } catch (err) {

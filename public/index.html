@@ -380,6 +380,10 @@
 
       conversationId = data.conversationId;
       appendMessage('assistant', data.message.content);
+      if (data.title) {
+        const item = convList.querySelector(`[data-id="${data.conversationId}"]`);
+        if (item) item.textContent = data.title;
+      }
       loadConversations();
     } catch (err) {
       removeTyping();
