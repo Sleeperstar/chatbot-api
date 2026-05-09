@@ -3,12 +3,25 @@ import openai from './openai.js';
 
 const SYSTEM_PROMPT = 'Eres un asistente útil y conciso.';
 
+function buildTitlePrompt(firstMessage) {
+  return `Genera un título de máximo 6 palabras para una conversación que comienza con: ${firstMessage}. Solo el título.`;
+}
+
+function normalizeGeneratedTitle(raw) {
+  if (!raw) return '';
+  let t = String(raw).trim();
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    t = t.slice(1, -1).trim();
+  }
+  return t;
+}
+
 export async function sendMessage(userContent, conversationId = null) {
   // Crear conversación si no existe
   if (!conversationId) {
     const { data, error } = await supabase
       .from('conversations')
-      .insert({ title: userContent.slice(0, 60) })
+      .insert({ title: null })
       .select('id')
       .single();
     if (error) throw error;
@@ -28,6 +41,36 @@ export async function sendMessage(userContent, conversationId = null) {
     .from('messages')
     .insert({ conversation_id: conversationId, role: 'user', content: userContent });
   if (insertError) throw insertError;
+
+  const { data: convRow, error: convError } = await supabase
+    .from('conversations')
+    .select('title')
+    .eq('id', conversationId)
+    .single();
+  if (convError) throw convError;
+
+  let resolvedTitle = convRow?.title?.trim() || null;
+
+  if (!resolvedTitle) {
+    try {
+      const titleCompletion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: buildTitlePrompt(userContent) }],
+      });
+      const generated = normalizeGeneratedTitle(titleCompletion.choices[0]?.message?.content);
+      if (generated) {
+        const { error: titleUpdateError } = await supabase
+          .from('conversations')
+          .update({ title: generated })
+          .eq('id', conversationId);
+        if (!titleUpdateError) {
+          resolvedTitle = generated;
+        }
+      }
+    } catch (err) {
+      console.error('No se pudo generar el título de la conversación:', err);
+    }
+  }
 
   // Llamar a OpenAI con historial completo
   const messages = [
@@ -49,5 +92,12 @@ export async function sendMessage(userContent, conversationId = null) {
     .insert({ conversation_id: conversationId, role: 'assistant', content: assistantContent });
   if (saveError) throw saveError;
 
-  return { conversationId, message: { role: 'assistant', content: assistantContent } };
+  const result = {
+    conversationId,
+    message: { role: 'assistant', content: assistantContent },
+  };
+  if (resolvedTitle) {
+    result.title = resolvedTitle;
+  }
+  return result;
 }

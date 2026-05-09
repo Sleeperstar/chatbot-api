@@ -16,8 +16,10 @@ app.use(express.static(join(__dirname, '..', 'public')));
 app.use('/api/chat', chatRouter);
 app.use('/api/conversations', conversationsRouter);
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 export default app;
