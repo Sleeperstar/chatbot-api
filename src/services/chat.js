@@ -1,14 +1,14 @@
 import supabase from './supabase.js';
-import openai from './openai.js';
+import openai, { generateTitle } from './openai.js';
 
 const SYSTEM_PROMPT = 'Eres un asistente útil y conciso.';
 
 export async function sendMessage(userContent, conversationId = null) {
-  // Crear conversación si no existe
   if (!conversationId) {
+    const title = await generateTitle(userContent);
     const { data, error } = await supabase
       .from('conversations')
-      .insert({ title: userContent.slice(0, 60) })
+      .insert({ title })
       .select('id')
       .single();
     if (error) throw error;
